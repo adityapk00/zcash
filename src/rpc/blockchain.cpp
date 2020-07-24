@@ -1052,6 +1052,12 @@ UniValue getblockchaininfo(const UniValue& params, bool fHelp)
     else
         obj.push_back(Pair("estimatedheight",       (int)chainActive.Height()));
 
+    if (IsInitialBlockDownload(Params())) {
+        obj.push_back(Pair("estimatedheight",   EstimateNetHeight(Params().GetConsensus(), (int)chainActive.Height(), chainActive.Tip()->nTime)));
+    } else {
+        obj.push_back(Pair("estimatedheight",  (int)chainActive.Height()));
+    }
+
     SproutMerkleTree tree;
     pcoinsTip->GetSproutAnchorAt(pcoinsTip->GetBestAnchor(SPROUT), tree);
     obj.pushKV("commitments",           static_cast<uint64_t>(tree.size()));

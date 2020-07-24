@@ -4,6 +4,7 @@
 
 #include "uint256.h"
 #include "consensus/params.h"
+#include "chainparams.h"
 
 #include <atomic>
 #include <mutex>
@@ -76,6 +77,8 @@ boost::optional<int64_t> SecondsLeftToNextEpoch(const Consensus::Params& params,
 std::string DisplayDuration(int64_t time, DurationFormat format);
 std::string DisplaySize(size_t value);
 std::string DisplayHashRate(double value);
+
+int EstimateNetHeight(int height, int64_t tipmediantime, const CChainParams& chainParams);
 
 void TriggerRefresh();
 
