@@ -467,7 +467,7 @@ void CCoinsViewCache::PushHistoryNode(uint32_t epochId, const HistoryNode node) 
         // special case, it just goes into the cache right away
         historyCache.Extend(node);
 
-        if (librustzcash_mmr_hash_node(epochId, node.data(), historyCache.root.begin()) != 0) {
+        if (librustzcash_mmr_hash_node(epochId, &node, historyCache.root.begin()) != 0) {
             throw std::runtime_error("hashing node failed");
         };
 
@@ -480,7 +480,7 @@ void CCoinsViewCache::PushHistoryNode(uint32_t epochId, const HistoryNode node) 
     PreloadHistoryTree(epochId, false, entries, entry_indices);
 
     uint256 newRoot;
-    std::array<HistoryNode, 32> appendBuf;
+    std::array<HistoryNode, 32> appendBuf = {};
 
     uint32_t appends = librustzcash_mmr_append(
         epochId, 
@@ -488,9 +488,9 @@ void CCoinsViewCache::PushHistoryNode(uint32_t epochId, const HistoryNode node) 
         entry_indices.data(),
         entries.data(),
         entry_indices.size(),
-        node.data(),
+        &node,
         newRoot.begin(),
-        appendBuf.data()->data()
+        appendBuf.data()
     );
 
     for (size_t i = 0; i < appends; i++) {
@@ -506,25 +506,41 @@ void CCoinsViewCache::PopHistoryNode(uint32_t epochId) {
 
     switch (historyCache.length) {
         case 0:
-            // Caller is not expected to pop from empty tree! Caller should
-            // switch to previous epoch and pop history from there.
-            throw std::runtime_error("popping history node from empty history");
+        {
+            // Caller is generally not expected to pop from empty tree! Caller
+            // should switch to previous epoch and pop history from there.
+
+            // If we are doing an expected rollback that changes the consensus
+            // branch ID for some upgrade (or introduces one that wasn't present
+            // at the equivalent height) this will occur because
+            // `SelectHistoryCache` selects the tree for the new consensus
+            // branch ID, not the one that existed on the chain being rolled
+            // back.
+            
+            // Sensible action is to truncate the history cache:
+        }
         case 1:
+        {
             // Just resetting tree to empty
             historyCache.Truncate(0);
             historyCache.root = uint256();
             return;
+        }
         case 2:
+        {
             // - A tree with one leaf has length 1.
             // - A tree with two leaves has length 3.
             throw std::runtime_error("a history tree cannot have two nodes");
+        }
         case 3:
+        {
+            const HistoryNode tmpHistoryRoot = GetHistoryAt(epochId, 0);
             // After removing a leaf from a tree with two leaves, we are left
             // with a single-node tree, whose root is just the hash of that
             // node.
             if (librustzcash_mmr_hash_node(
                 epochId,
-                GetHistoryAt(epochId, 0).data(),
+                &tmpHistoryRoot,
                 newRoot.begin()
             ) != 0) {
                 throw std::runtime_error("hashing node failed");
@@ -532,7 +548,9 @@ void CCoinsViewCache::PopHistoryNode(uint32_t epochId) {
             historyCache.Truncate(1);
             historyCache.root = newRoot;
             return;
+        }
         default:
+        {
             // This is a non-elementary pop, so use the full tree logic.
             std::vector<HistoryEntry> entries;
             std::vector<uint32_t> entry_indices;
@@ -552,6 +570,7 @@ void CCoinsViewCache::PopHistoryNode(uint32_t epochId) {
             historyCache.Truncate(historyCache.length - numberOfDeletes);
             historyCache.root = newRoot;
             return;
+        }
     }
 }
 
@@ -727,8 +746,7 @@ void BatchWriteNullifiers(CNullifiersMap &mapNullifiers, CNullifiersMap &cacheNu
                 }
             }
         }
-        CNullifiersMap::iterator itOld = child_it++;
-        mapNullifiers.erase(itOld);
+        child_it = mapNullifiers.erase(child_it);
     }
 }
 
@@ -760,8 +778,7 @@ void BatchWriteAnchors(
             }
         }
 
-        MapIterator itOld = child_it++;
-        mapAnchors.erase(itOld);
+        child_it = mapAnchors.erase(child_it);
     }
 }
 
@@ -835,8 +852,7 @@ bool CCoinsViewCache::BatchWrite(CCoinsMap &mapCoins,
                 }
             }
         }
-        CCoinsMap::iterator itOld = it++;
-        mapCoins.erase(itOld);
+        it = mapCoins.erase(it);
     }
 
     ::BatchWriteAnchors<CAnchorsSproutMap, CAnchorsSproutMap::iterator, CAnchorsSproutCacheEntry>(mapSproutAnchors, cacheSproutAnchors, cachedCoinsUsage);

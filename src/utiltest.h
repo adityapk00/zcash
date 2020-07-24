@@ -53,6 +53,11 @@ const Consensus::Params& RegtestActivateHeartwood(bool updatePow, int heartwoodA
 
 void RegtestDeactivateHeartwood();
 
+const Consensus::Params& RegtestActivateCanopy(bool updatePow, int canopyActivationHeight = Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
+const Consensus::Params& RegtestActivateCanopy();
+
+void RegtestDeactivateCanopy();
+
 libzcash::SaplingExtendedSpendingKey GetTestMasterSaplingSpendingKey();
 
 CKey AddTestCKeyToKeyStore(CBasicKeyStore& keyStore);

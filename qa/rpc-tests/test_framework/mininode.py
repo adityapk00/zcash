@@ -53,14 +53,7 @@ OVERWINTER_VERSION_GROUP_ID = 0x03C48270
 SAPLING_VERSION_GROUP_ID = 0x892F2085
 # No transaction format change in Blossom.
 
-SPROUT_BRANCH_ID = 0x00000000
-OVERWINTER_BRANCH_ID = 0x5BA81B19
-SAPLING_BRANCH_ID = 0x76B809BB
-BLOSSOM_BRANCH_ID = 0x2BB40E60
-HEARTWOOD_BRANCH_ID = 0xF5B9230B
-
 MAX_INV_SZ = 50000
-
 
 COIN = 100000000 # 1 zec in zatoshis
 
@@ -81,10 +74,14 @@ mininode_lock = RLock()
 def sha256(s):
     return hashlib.new('sha256', s).digest()
 
-
 def hash256(s):
     return sha256(sha256(s))
 
+def nuparams(branch_id, height):
+    return '-nuparams=%x:%d' % (branch_id, height)
+
+def fundingstream(idx, start_height, end_height, addrs):
+    return '-fundingstream=%d:%d:%d:%s' % (idx, start_height, end_height, ",".join(addrs))
 
 def ser_compactsize(n):
     if n < 253:
