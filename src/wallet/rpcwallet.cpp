@@ -13,6 +13,7 @@
 #include "main.h"
 #include "net.h"
 #include "netbase.h"
+#include "proof_verifier.h"
 #include "rpc/server.h"
 #include "timedata.h"
 #include "transaction_builder.h"
@@ -33,8 +34,6 @@
 #include "wallet/asyncrpcoperation_sendmany.h"
 #include "wallet/asyncrpcoperation_shieldcoinbase.h"
 
-#include "sodium.h"
-
 #include <stdint.h>
 
 #include <boost/assign/list_of.hpp>
@@ -43,6 +42,8 @@
 #include <univalue.h>
 
 #include <numeric>
+
+#include <rust/ed25519.h>
 
 using namespace std;
 
@@ -2759,10 +2760,9 @@ UniValue zc_sample_joinsplit(const UniValue& params, bool fHelp)
 
     LOCK(cs_main);
 
-    uint256 joinSplitPubKey;
+    Ed25519VerificationKey joinSplitPubKey;
     uint256 anchor = SproutMerkleTree().root();
-    JSDescription samplejoinsplit(*pzcashParams,
-                                  joinSplitPubKey,
+    JSDescription samplejoinsplit(joinSplitPubKey,
                                   anchor,
                                   {JSInput(), JSInput()},
                                   {JSOutput(), JSOutput()},
@@ -3041,11 +3041,12 @@ UniValue zc_raw_joinsplit(const UniValue& params, bool fHelp)
 
     const bool canopyActive = Params().GetConsensus().NetworkUpgradeActive(nextBlockHeight, Consensus::UPGRADE_CANOPY);
 
-    if (params[3].get_real() != 0.0)
+    if (params[3].get_real() != 0.0) {
         if (canopyActive) {
             throw JSONRPCError(RPC_VERIFY_REJECTED, "Sprout shielding is not supported after Canopy");
         }
         vpub_old = AmountFromValue(params[3]);
+    }
 
     if (params[4].get_real() != 0.0)
         vpub_new = AmountFromValue(params[4]);
@@ -3127,17 +3128,16 @@ UniValue zc_raw_joinsplit(const UniValue& params, bool fHelp)
         throw runtime_error("unsupported joinsplit input/output counts");
     }
 
-    uint256 joinSplitPubKey;
-    unsigned char joinSplitPrivKey[crypto_sign_SECRETKEYBYTES];
-    crypto_sign_keypair(joinSplitPubKey.begin(), joinSplitPrivKey);
+    Ed25519VerificationKey joinSplitPubKey;
+    Ed25519SigningKey joinSplitPrivKey;
+    ed25519_generate_keypair(&joinSplitPrivKey, &joinSplitPubKey);
 
     CMutableTransaction mtx(tx);
     mtx.nVersion = 4;
     mtx.nVersionGroupId = SAPLING_VERSION_GROUP_ID;
     mtx.joinSplitPubKey = joinSplitPubKey;
 
-    JSDescription jsdesc(*pzcashParams,
-                         joinSplitPubKey,
+    JSDescription jsdesc(joinSplitPubKey,
                          anchor,
                          {vjsin[0], vjsin[1]},
                          {vjsout[0], vjsout[1]},
@@ -3145,8 +3145,8 @@ UniValue zc_raw_joinsplit(const UniValue& params, bool fHelp)
                          vpub_new);
 
     {
-        auto verifier = libzcash::ProofVerifier::Strict();
-        assert(jsdesc.Verify(*pzcashParams, verifier, joinSplitPubKey));
+        auto verifier = ProofVerifier::Strict();
+        assert(verifier.VerifySprout(jsdesc, joinSplitPubKey));
     }
 
     mtx.vJoinSplit.push_back(jsdesc);
@@ -3158,16 +3158,16 @@ UniValue zc_raw_joinsplit(const UniValue& params, bool fHelp)
     uint256 dataToBeSigned = SignatureHash(scriptCode, signTx, NOT_AN_INPUT, SIGHASH_ALL, 0, consensusBranchId);
 
     // Add the signature
-    assert(crypto_sign_detached(&mtx.joinSplitSig[0], NULL,
-                         dataToBeSigned.begin(), 32,
-                         joinSplitPrivKey
-                        ) == 0);
+    assert(ed25519_sign(
+        &joinSplitPrivKey,
+        dataToBeSigned.begin(), 32,
+        &mtx.joinSplitSig));
 
     // Sanity check
-    assert(crypto_sign_verify_detached(&mtx.joinSplitSig[0],
-                                       dataToBeSigned.begin(), 32,
-                                       mtx.joinSplitPubKey.begin()
-                                      ) == 0);
+    assert(ed25519_verify(
+        &mtx.joinSplitPubKey,
+        &mtx.joinSplitSig,
+        dataToBeSigned.begin(), 32));
 
     CTransaction rawTx(mtx);
 
@@ -3804,7 +3804,10 @@ UniValue z_viewtransaction(const UniValue& params, bool fHelp)
         auto wtxPrev = pwalletMain->mapWallet.at(op.hash);
 
         // We don't need to check the leadbyte here: if wtx exists in
-        // the wallet, it must have already passed the leadbyte check
+        // the wallet, it must have been successfully decrypted. This
+        // means the plaintext leadbyte was valid at the block height
+        // where the note was received.
+        // https://zips.z.cash/zip-0212#changes-to-the-process-of-receiving-sapling-notes
         auto decrypted = wtxPrev.DecryptSaplingNoteWithoutLeadByteCheck(op).get();
         auto notePt = decrypted.first;
         auto pa = decrypted.second;
@@ -3834,7 +3837,10 @@ UniValue z_viewtransaction(const UniValue& params, bool fHelp)
         bool isOutgoing;
 
         // We don't need to check the leadbyte here: if wtx exists in
-        // the wallet, it must have already passed the leadbyte check
+        // the wallet, it must have been successfully decrypted. This
+        // means the plaintext leadbyte was valid at the block height
+        // where the note was received.
+        // https://zips.z.cash/zip-0212#changes-to-the-process-of-receiving-sapling-notes
         auto decrypted = wtx.DecryptSaplingNoteWithoutLeadByteCheck(op);
         if (decrypted) {
             notePt = decrypted->first;

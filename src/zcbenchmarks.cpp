@@ -19,6 +19,8 @@
 #include "miner.h"
 #include "policy/policy.h"
 #include "pow.h"
+#include "proof_verifier.h"
+#include "random.h"
 #include "rpc/server.h"
 #include "script/sign.h"
 #include "sodium.h"
@@ -33,6 +35,8 @@
 #include "zcash/IncrementalMerkleTree.hpp"
 #include "zcash/Note.hpp"
 #include "librustzcash.h"
+
+#include <rust/ed25519/types.h>
 
 using namespace libzcash;
 // This method is based on Shutdown from init.cpp
@@ -94,15 +98,14 @@ double benchmark_sleep()
 
 double benchmark_create_joinsplit()
 {
-    uint256 joinSplitPubKey;
+    Ed25519VerificationKey joinSplitPubKey;
 
     /* Get the anchor of an empty commitment tree. */
     uint256 anchor = SproutMerkleTree().root();
 
     struct timeval tv_start;
     timer_start(tv_start);
-    JSDescription jsdesc(*pzcashParams,
-                         joinSplitPubKey,
+    JSDescription jsdesc(joinSplitPubKey,
                          anchor,
                          {JSInput(), JSInput()},
                          {JSOutput(), JSOutput()},
@@ -110,8 +113,8 @@ double benchmark_create_joinsplit()
                          0);
     double ret = timer_stop(tv_start);
 
-    auto verifier = libzcash::ProofVerifier::Strict();
-    assert(jsdesc.Verify(*pzcashParams, verifier, joinSplitPubKey));
+    auto verifier = ProofVerifier::Strict();
+    assert(verifier.VerifySprout(jsdesc, joinSplitPubKey));
     return ret;
 }
 
@@ -140,9 +143,9 @@ double benchmark_verify_joinsplit(const JSDescription &joinsplit)
 {
     struct timeval tv_start;
     timer_start(tv_start);
-    uint256 joinSplitPubKey;
-    auto verifier = libzcash::ProofVerifier::Strict();
-    joinsplit.Verify(*pzcashParams, verifier, joinSplitPubKey);
+    Ed25519VerificationKey joinSplitPubKey;
+    auto verifier = ProofVerifier::Strict();
+    verifier.VerifySprout(joinsplit, joinSplitPubKey);
     return timer_stop(tv_start);
 }
 
@@ -161,8 +164,7 @@ double benchmark_solve_equihash()
     EhInitialiseState(n, k, eh_state);
     crypto_generichash_blake2b_update(&eh_state, (unsigned char*)&ss[0], ss.size());
 
-    uint256 nonce;
-    randombytes_buf(nonce.begin(), 32);
+    uint256 nonce = GetRandHash();
     crypto_generichash_blake2b_update(&eh_state,
                                     nonce.begin(),
                                     nonce.size());
@@ -277,7 +279,7 @@ double benchmark_try_decrypt_sprout_notes(size_t nKeys)
     }
 
     auto sk = libzcash::SproutSpendingKey::random();
-    auto tx = GetValidSproutReceive(*pzcashParams, sk, 10, true);
+    auto tx = GetValidSproutReceive(sk, 10, true);
 
     struct timeval tv_start;
     timer_start(tv_start);
@@ -313,8 +315,8 @@ double benchmark_try_decrypt_sapling_notes(size_t nKeys)
 }
 
 CWalletTx CreateSproutTxWithNoteData(const libzcash::SproutSpendingKey& sk) {
-    auto wtx = GetValidSproutReceive(*pzcashParams, sk, 10, true);
-    auto note = GetSproutNote(*pzcashParams, sk, wtx, 0, 1);
+    auto wtx = GetValidSproutReceive(sk, 10, true);
+    auto note = GetSproutNote(sk, wtx, 0, 1);
     auto nullifier = note.nullifier(sk);
 
     mapSproutNoteData_t noteDataMap;

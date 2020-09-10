@@ -32,7 +32,7 @@ RE_FORTIFY_USED = re.compile('Binary compiled with FORTIFY_SOURCE support.*Yes')
 
 def test_rpath_runpath(filename):
     output = subprocess.check_output(
-        [repofile('qa/zcash/checksec.sh'), '--file', repofile(filename)]
+        [repofile('qa/zcash/checksec.sh'), '--file=' + repofile(filename)]
     )
     if RE_RPATH_RUNPATH.search(output.decode('utf-8')):
         print('PASS: %s has no RPATH or RUNPATH.' % filename)
@@ -44,7 +44,7 @@ def test_rpath_runpath(filename):
 
 def test_fortify_source(filename):
     proc = subprocess.Popen(
-        [repofile('qa/zcash/checksec.sh'), '--fortify-file', repofile(filename)],
+        [repofile('qa/zcash/checksec.sh'), '--fortify-file=' + repofile(filename)],
         stdout=subprocess.PIPE,
     )
     line1 = proc.stdout.readline()
@@ -149,7 +149,6 @@ def rust_test():
 #
 
 STAGES = [
-    'check-depends',
     'rust-test',
     'btest',
     'gtest',
@@ -162,7 +161,6 @@ STAGES = [
 ]
 
 STAGE_COMMANDS = {
-    'check-depends': ['qa/zcash/test-depends-sources-mirror.py'],
     'rust-test': rust_test,
     'btest': [repofile('src/test/test_bitcoin'), '-p'],
     'gtest': [repofile('src/zcash-gtest')],
