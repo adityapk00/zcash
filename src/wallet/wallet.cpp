@@ -12,11 +12,13 @@
 #include "consensus/upgrades.h"
 #include "consensus/validation.h"
 #include "consensus/consensus.h"
+#include "fs.h"
 #include "init.h"
 #include "key_io.h"
 #include "main.h"
 #include "net.h"
 #include "policy/policy.h"
+#include "random.h"
 #include "rpc/protocol.h"
 #include "rpc/server.h"
 #include "script/script.h"
@@ -27,10 +29,10 @@
 #include "crypter.h"
 #include "wallet/asyncrpcoperation_saplingmigration.h"
 
+#include <algorithm>
 #include <assert.h>
 
 #include <boost/algorithm/string/replace.hpp>
-#include <boost/filesystem.hpp>
 #include <boost/thread.hpp>
 
 using namespace std;
@@ -587,18 +589,26 @@ void CWallet::ChainTipAdded(const CBlockIndex *pindex,
     IncrementNoteWitnesses(pindex, pblock, sproutTree, saplingTree);
     UpdateSaplingNullifierNoteMapForBlock(pblock);
 
-    // SetBestChain() can be expensive for large wallets, so do this
-    // at most once per hour; the wallet state will be brought up to
-    // date during rescanning on startup.
+    // SetBestChain() can be expensive for large wallets, so do only
+    // this sometimes; the wallet state will be brought up to date
+    // during rescanning on startup.
     int64_t nNow = GetTimeMicros();
     if (nLastSetChain == 0) {
         // Don't flush during startup.
         nLastSetChain = nNow;
     }
-    if (nLastSetChain + (int64_t)DATABASE_WRITE_INTERVAL * 1000000 < nNow) {
+    if (++nSetChainUpdates >= WITNESS_WRITE_UPDATES ||
+            nLastSetChain + (int64_t)WITNESS_WRITE_INTERVAL * 1000000 < nNow) {
         nLastSetChain = nNow;
-        LOCK(cs_main);
-        SetBestChain(chainActive.GetLocator());
+        nSetChainUpdates = 0;
+        CBlockLocator loc;
+        {
+            // The locator must be derived from the pindex used to increment
+            // the witnesses above; pindex can be behind chainActive.Tip().
+            LOCK(cs_main);
+            loc = chainActive.GetLocator(pindex);
+        }
+        SetBestChain(loc);
     }
 }
 
@@ -873,19 +883,29 @@ bool CWallet::Verify()
     LogPrintf("Using wallet %s\n", walletFile);
     uiInterface.InitMessage(_("Verifying wallet..."));
 
-    // Wallet file must be a plain filename without a directory
-    if (walletFile != boost::filesystem::basename(walletFile) + boost::filesystem::extension(walletFile))
-        return UIError(strprintf(_("Wallet %s resides outside data directory %s"), walletFile, GetDataDir().string()));
+    if (walletFile != fs::basename(walletFile) + fs::extension(walletFile)) {
+        fs::path path(walletFile);
+        if (path.is_absolute()) {
+            if (!fs::exists(path.parent_path())) {
+                return UIError(strprintf(_("Absolute path %s does not exist"), walletFile));
+            }
+        } else {
+            fs::path full_path = GetDataDir() / path;
+            if (!fs::exists(full_path.parent_path())) {
+                return UIError(strprintf(_("Relative path %s does not exist"), walletFile));
+            }
+        }
+    }
 
     if (!bitdb.Open(GetDataDir()))
     {
         // try moving the database env out of the way
-        boost::filesystem::path pathDatabase = GetDataDir() / "database";
-        boost::filesystem::path pathDatabaseBak = GetDataDir() / strprintf("database.%d.bak", GetTime());
+        fs::path pathDatabase = GetDataDir() / "database";
+        fs::path pathDatabaseBak = GetDataDir() / strprintf("database.%d.bak", GetTime());
         try {
-            boost::filesystem::rename(pathDatabase, pathDatabaseBak);
+            fs::rename(pathDatabase, pathDatabaseBak);
             LogPrintf("Moved old %s to %s. Retrying.\n", pathDatabase.string(), pathDatabaseBak.string());
-        } catch (const boost::filesystem::filesystem_error&) {
+        } catch (const fs::filesystem_error&) {
             // failure is ok (well, not really, but it's not worse than what we started with)
         }
 
@@ -903,7 +923,7 @@ bool CWallet::Verify()
             return false;
     }
 
-    if (boost::filesystem::exists(GetDataDir() / walletFile))
+    if (fs::exists(GetDataDir() / walletFile))
     {
         CDBEnv::VerifyResult r = bitdb.Verify(walletFile, CWalletDB::Recover);
         if (r == CDBEnv::RECOVER_OK)
@@ -3288,7 +3308,7 @@ bool CWallet::SelectCoinsMinConf(const CAmount& nTargetValue, int nConfMine, int
     vector<pair<CAmount, pair<const CWalletTx*,unsigned int> > > vValue;
     CAmount nTotalLower = 0;
 
-    random_shuffle(vCoins.begin(), vCoins.end(), GetRandInt);
+    std::shuffle(vCoins.begin(), vCoins.end(), ZcashRandomEngine());
 
     BOOST_FOREACH(const COutput &output, vCoins)
     {
@@ -4634,7 +4654,7 @@ std::string CWallet::GetWalletHelpString(bool showDebug)
     strUsage += HelpMessageOpt("-txconfirmtarget=<n>", strprintf(_("If paytxfee is not set, include enough fee so transactions begin confirmation on average within n blocks (default: %u)"), DEFAULT_TX_CONFIRM_TARGET));
     strUsage += HelpMessageOpt("-txexpirydelta", strprintf(_("Set the number of blocks after which a transaction that has not been mined will become invalid (min: %u, default: %u (pre-Blossom) or %u (post-Blossom))"), TX_EXPIRING_SOON_THRESHOLD + 1, DEFAULT_PRE_BLOSSOM_TX_EXPIRY_DELTA, DEFAULT_POST_BLOSSOM_TX_EXPIRY_DELTA));
     strUsage += HelpMessageOpt("-upgradewallet", _("Upgrade wallet to latest format on startup"));
-    strUsage += HelpMessageOpt("-wallet=<file>", _("Specify wallet file (within data directory)") + " " + strprintf(_("(default: %s)"), DEFAULT_WALLET_DAT));
+    strUsage += HelpMessageOpt("-wallet=<file>", _("Specify wallet file absolute path or a path relative to the data directory") + " " + strprintf(_("(default: %s)"), DEFAULT_WALLET_DAT));
     strUsage += HelpMessageOpt("-walletbroadcast", _("Make the wallet broadcast transactions") + " " + strprintf(_("(default: %u)"), DEFAULT_WALLETBROADCAST));
     strUsage += HelpMessageOpt("-walletnotify=<cmd>", _("Execute command when a wallet transaction changes (%s in cmd is replaced by TxID)"));
     strUsage += HelpMessageOpt("-zapwallettxes=<mode>", _("Delete all wallet transactions and only recover those parts of the blockchain through -rescan on startup") +
@@ -4759,7 +4779,7 @@ bool CWallet::InitLoadWallet(bool clearWitnessCaches)
     if (chainActive.Tip() && chainActive.Tip() != pindexRescan)
     {
         // We can't rescan beyond non-pruned blocks, stop and throw an error.
-        // This might happen if a user uses a old wallet within a pruned node,
+        // This might happen if a user uses an old wallet within a pruned node,
         // or if they ran -disablewallet for a longer time, then decided to re-enable.
         if (fPruneMode)
         {

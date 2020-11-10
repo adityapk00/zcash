@@ -35,7 +35,6 @@
 #include "validationinterface.h"
 
 #include <librustzcash.h>
-#include "sodium.h"
 
 #include <boost/thread.hpp>
 #include <boost/tuple/tuple.hpp>
@@ -620,7 +619,7 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const MinerAddre
         pblocktemplate->vTxSigOps[0] = GetLegacySigOpCount(pblock->vtx[0]);
 
         CValidationState state;
-        if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false))
+        if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false))
             throw std::runtime_error(std::string("CreateNewBlock(): TestBlockValidity failed: ") + state.GetRejectReason());
     }
 
@@ -734,7 +733,7 @@ void static BitcoinMiner(const CChainParams& chainparams)
     std::mutex m_cs;
     bool cancelSolver = false;
     boost::signals2::connection c = uiInterface.NotifyBlockTip.connect(
-        [&m_cs, &cancelSolver](const uint256& hashNewTip) mutable {
+        [&m_cs, &cancelSolver](bool, const CBlockIndex *) mutable {
             std::lock_guard<std::mutex> lock{m_cs};
             cancelSolver = true;
         }
@@ -796,7 +795,7 @@ void static BitcoinMiner(const CChainParams& chainparams)
 
             while (true) {
                 // Hash state
-                crypto_generichash_blake2b_state state;
+                eh_HashState state;
                 EhInitialiseState(n, k, state);
 
                 // I = the block header minus nonce and solution.
@@ -805,14 +804,12 @@ void static BitcoinMiner(const CChainParams& chainparams)
                 ss << I;
 
                 // H(I||...
-                crypto_generichash_blake2b_update(&state, (unsigned char*)&ss[0], ss.size());
+                state.Update((unsigned char*)&ss[0], ss.size());
 
                 // H(I||V||...
-                crypto_generichash_blake2b_state curr_state;
+                eh_HashState curr_state;
                 curr_state = state;
-                crypto_generichash_blake2b_update(&curr_state,
-                                                  pblock->nNonce.begin(),
-                                                  pblock->nNonce.size());
+                curr_state.Update(pblock->nNonce.begin(), pblock->nNonce.size());
 
                 // (x_1, x_2, ...) = A(I, V, n, k)
                 LogPrint("pow", "Running Equihash solver \"%s\" with nNonce = %s\n",
@@ -860,7 +857,7 @@ void static BitcoinMiner(const CChainParams& chainparams)
                 if (solver == "tromp") {
                     // Create solver and initialize it.
                     equi eq(1);
-                    eq.setstate(&curr_state);
+                    eq.setstate(curr_state.inner.get());
 
                     // Initialization done, start algo driver.
                     eq.digit0(0);

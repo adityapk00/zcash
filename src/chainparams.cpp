@@ -93,7 +93,7 @@ public:
         consensus.nMajorityRejectBlockOutdated = 950;
         consensus.nMajorityWindow = 4000;
         const size_t N = 200, K = 9;
-        BOOST_STATIC_ASSERT(equihash_parameters_acceptable(N, K));
+        static_assert(equihash_parameters_acceptable(N, K));
         consensus.nEquihashN = N;
         consensus.nEquihashK = K;
         consensus.powLimit = uint256S("0007ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
@@ -208,7 +208,7 @@ public:
 
             consensus.AddZIP207FundingStream(
                 keyConstants,
-                Consensus::FS_ZIP214_ECC,
+                Consensus::FS_ZIP214_BP,
                 consensus.vUpgrades[Consensus::UPGRADE_CANOPY].nActivationHeight, 2726400,
                 ecc_addresses);
             consensus.AddZIP207FundingStream(
@@ -278,7 +278,6 @@ public:
             (525000, uint256S("0x0000000001a36c500378be8862d9bf1bea8f1616da6e155971b608139cc7e39b")),
             1556722044,     // * UNIX timestamp of last checkpoint block
             4653556,        // * total number of transactions between genesis and last checkpoint
-                            //   (the tx=... number in the SetBestChain debug.log lines)
             5106            // * estimated number of transactions per day after checkpoint
                             //   total number of tx / (checkpoint block height / (24 * 24))
         };
@@ -371,7 +370,7 @@ public:
         consensus.nMajorityRejectBlockOutdated = 75;
         consensus.nMajorityWindow = 400;
         const size_t N = 200, K = 9;
-        BOOST_STATIC_ASSERT(equihash_parameters_acceptable(N, K));
+        static_assert(equihash_parameters_acceptable(N, K));
         consensus.nEquihashN = N;
         consensus.nEquihashK = K;
         consensus.powLimit = uint256S("07ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
@@ -493,7 +492,7 @@ public:
 
             consensus.AddZIP207FundingStream(
                 keyConstants,
-                Consensus::FS_ZIP214_ECC,
+                Consensus::FS_ZIP214_BP,
                 consensus.vUpgrades[Consensus::UPGRADE_CANOPY].nActivationHeight, 2796000,
                 ecc_addresses);
             consensus.AddZIP207FundingStream(
@@ -566,7 +565,6 @@ public:
             (38000, uint256S("0x001e9a2d2e2892b88e9998cf7b079b41d59dd085423a921fe8386cecc42287b8")),
             1486897419,  // * UNIX timestamp of last checkpoint block
             47163,       // * total number of transactions between genesis and last checkpoint
-                         //   (the tx=... number in the SetBestChain debug.log lines)
             715          //   total number of tx / (checkpoint block height / (24 * 24))
         };
 
@@ -615,7 +613,7 @@ public:
         consensus.nMajorityRejectBlockOutdated = 950;
         consensus.nMajorityWindow = 1000;
         const size_t N = 48, K = 5;
-        BOOST_STATIC_ASSERT(equihash_parameters_acceptable(N, K));
+        static_assert(equihash_parameters_acceptable(N, K));
         consensus.nEquihashN = N;
         consensus.nEquihashK = K;
         consensus.powLimit = uint256S("0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f");
