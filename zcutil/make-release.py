@@ -128,9 +128,10 @@ def verify_dependencies(dependencies):
 
 @phase('Checking dependency updates.')
 def verify_dependency_updates():
-    status = subprocess.call(['python', 'qa/zcash/updatecheck.py'])
-    if status != 0:
-        raise SystemExit("Dependency update check did not pass.")
+    try:
+        sh_log('./qa/zcash/updatecheck.py')
+    except SystemExit:
+        raise SystemExit("Dependency update check found updates that have not been correctly postponed.")
 
 @phase('Checking tags.')
 def verify_tags(releaseprev, releasefrom):
@@ -273,7 +274,6 @@ def build():
         'Staging boost...',
         'Staging libevent...',
         'Staging zeromq...',
-        'Staging libgmp...',
         'Staging libsodium...',
         "Leaving directory '%s'" % depends_dir,
         'config.status: creating libzcashconsensus.pc',
@@ -296,7 +296,6 @@ def gen_manpages():
 @phase('Generating release notes.')
 def gen_release_notes(release, releasefrom):
     release_notes = [
-        'python',
         './zcutil/release-notes.py',
         '--version',
         release.novtext,

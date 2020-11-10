@@ -4,6 +4,7 @@
 #include "utilmoneystr.h"
 #include "chainparams.h"
 #include "consensus/funding.h"
+#include "fs.h"
 #include "key_io.h"
 #include "utilstrencodings.h"
 #include "zcash/Address.hpp"
@@ -13,7 +14,6 @@
 #include <string>
 #include <set>
 #include <vector>
-#include <boost/filesystem.hpp>
 #include "util.h"
 #include "utiltest.h"
 
@@ -28,8 +28,8 @@
 #if 0
 TEST(FoundersRewardTest, create_testnet_2of3multisig) {
     SelectParams(CBaseChainParams::TESTNET);
-    boost::filesystem::path pathTemp = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path();
-    boost::filesystem::create_directories(pathTemp);
+    fs::path pathTemp = fs::temp_directory_path() / fs::unique_path();
+    fs::create_directories(pathTemp);
     mapArgs["-datadir"] = pathTemp.string();
     bool fFirstRun;
     auto pWallet = std::make_shared<CWallet>("wallet.dat");
@@ -150,7 +150,7 @@ TEST(FoundersRewardTest, RegtestGetLastBlockBlossom) {
 
 TEST(FoundersRewardTest, MainnetGetLastBlock) {
     SelectParams(CBaseChainParams::MAIN);
-    auto params = Params().GetConsensus();
+    const Consensus::Params& params = Params().GetConsensus();
     int lastFRHeight = GetLastFoundersRewardHeight(params);
     EXPECT_EQ(0, params.Halving(lastFRHeight));
     EXPECT_EQ(1, params.Halving(lastFRHeight + 1));

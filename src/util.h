@@ -5,7 +5,7 @@
 
 /**
  * Server/client environment: argument handling, config file parsing,
- * logging, thread wrappers
+ * thread wrappers
  */
 #ifndef BITCOIN_UTIL_H
 #define BITCOIN_UTIL_H
@@ -15,6 +15,8 @@
 #endif
 
 #include "compat.h"
+#include "fs.h"
+#include "logging.h"
 #include "tinyformat.h"
 #include "utiltime.h"
 
@@ -25,16 +27,8 @@
 #include <string>
 #include <vector>
 
-#include <boost/filesystem/path.hpp>
 #include <boost/signals2/signal.hpp>
 #include <boost/thread/exceptions.hpp>
-
-#include <tracing.h>
-
-static const bool DEFAULT_LOGTIMEMICROS = false;
-static const bool DEFAULT_LOGIPS        = false;
-static const bool DEFAULT_LOGTIMESTAMPS = true;
-extern const char * const DEFAULT_DEBUGLOGFILE;
 
 /** Signals for translation. */
 class CTranslationInterface
@@ -47,13 +41,8 @@ public:
 extern std::map<std::string, std::string> mapArgs;
 extern std::map<std::string, std::vector<std::string> > mapMultiArgs;
 extern bool fDebug;
-extern bool fPrintToConsole;
-extern bool fPrintToDebugLog;
 extern bool fServer;
 
-extern bool fLogTimestamps;
-extern bool fLogIPs;
-extern std::atomic<bool> fReopenDebugLog;
 extern CTranslationInterface translationInterface;
 
 [[noreturn]] extern void new_handler_terminate();
@@ -74,38 +63,13 @@ inline std::string _(const char* psz)
 void SetupEnvironment();
 bool SetupNetworking();
 
-/** Returns the filtering directive set by the -debug flags. */
-std::string LogConfigFilter();
-/** Return true if log accepts specified category */
-bool LogAcceptCategory(const char* category);
-
-/** Print to debug.log with level INFO and category "main". */
-#define LogPrintf(...) LogPrintInner("info", "main", __VA_ARGS__)
-
-/** Print to debug.log with level DEBUG. */
-#define LogPrint(category, ...) LogPrintInner("debug", category, __VA_ARGS__)
-
-#define LogPrintInner(level, category, ...) do {           \
-    std::string T_MSG = tfm::format(__VA_ARGS__);          \
-    if (!T_MSG.empty() && T_MSG[T_MSG.size()-1] == '\n') { \
-        T_MSG.erase(T_MSG.size()-1);                       \
-    }                                                      \
-    TracingLog(level, category, T_MSG.c_str());            \
-} while(0)
-
-#define LogError(category, ...) ([&]() {          \
-    std::string T_MSG = tfm::format(__VA_ARGS__); \
-    TracingError(category, T_MSG.c_str());        \
-    return false;                                 \
-}())
-
 template<typename... Args>
 static inline bool error(const char* format, const Args&... args)
 {
     return LogError("main", format, args...);
 }
 
-const boost::filesystem::path &ZC_GetParamsDir();
+const fs::path &ZC_GetParamsDir();
 
 void PrintExceptionContinue(const std::exception *pex, const char* pszThread);
 void ParseParameters(int argc, const char*const argv[]);
@@ -113,15 +77,15 @@ void FileCommit(FILE *fileout);
 bool TruncateFile(FILE *file, unsigned int length);
 int RaiseFileDescriptorLimit(int nMinFD);
 void AllocateFileRange(FILE *file, unsigned int offset, unsigned int length);
-bool RenameOver(boost::filesystem::path src, boost::filesystem::path dest);
-bool TryCreateDirectory(const boost::filesystem::path& p);
-boost::filesystem::path GetDefaultDataDir();
-const boost::filesystem::path &GetDataDir(bool fNetSpecific = true);
+bool RenameOver(fs::path src, fs::path dest);
+bool TryCreateDirectory(const fs::path& p);
+fs::path GetDefaultDataDir();
+const fs::path &GetDataDir(bool fNetSpecific = true);
 void ClearDatadirCache();
-boost::filesystem::path GetConfigFile(const std::string& confPath);
+fs::path GetConfigFile(const std::string& confPath);
 #ifndef WIN32
-boost::filesystem::path GetPidFile();
-void CreatePidFile(const boost::filesystem::path &path, pid_t pid);
+fs::path GetPidFile();
+void CreatePidFile(const fs::path &path, pid_t pid);
 #endif
 class missing_zcash_conf : public std::runtime_error {
 public:
@@ -129,13 +93,10 @@ public:
 };
 void ReadConfigFile(const std::string& confPath, std::map<std::string, std::string>& mapSettingsRet, std::map<std::string, std::vector<std::string> >& mapMultiSettingsRet);
 #ifdef WIN32
-boost::filesystem::path GetSpecialFolderPath(int nFolder, bool fCreate = true);
+fs::path GetSpecialFolderPath(int nFolder, bool fCreate = true);
 #endif
-boost::filesystem::path GetTempPath();
-boost::filesystem::path GetDebugLogPath();
-void ShrinkDebugFile();
 void runCommand(const std::string& strCommand);
-const boost::filesystem::path GetExportDir();
+const fs::path GetExportDir();
 
 /** Returns privacy notice (for -version, -help and metrics screen) */
 std::string PrivacyInfo();

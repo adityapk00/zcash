@@ -3,7 +3,6 @@
 #include <map>
 #include <thread>
 #include <unistd.h>
-#include <boost/filesystem.hpp>
 
 #include "coins.h"
 #include "util.h"
@@ -23,7 +22,6 @@
 #include "random.h"
 #include "rpc/server.h"
 #include "script/sign.h"
-#include "sodium.h"
 #include "streams.h"
 #include "txdb.h"
 #include "utiltest.h"
@@ -157,17 +155,15 @@ double benchmark_solve_equihash()
     CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
     ss << I;
 
-    auto params = Params(CBaseChainParams::MAIN).GetConsensus();
+    const Consensus::Params& params = Params(CBaseChainParams::MAIN).GetConsensus();
     unsigned int n = params.nEquihashN;
     unsigned int k = params.nEquihashK;
-    crypto_generichash_blake2b_state eh_state;
+    eh_HashState eh_state;
     EhInitialiseState(n, k, eh_state);
-    crypto_generichash_blake2b_update(&eh_state, (unsigned char*)&ss[0], ss.size());
+    eh_state.Update((unsigned char*)&ss[0], ss.size());
 
     uint256 nonce = GetRandHash();
-    crypto_generichash_blake2b_update(&eh_state,
-                                    nonce.begin(),
-                                    nonce.size());
+    eh_state.Update(nonce.begin(), nonce.size());
 
     struct timeval tv_start;
     timer_start(tv_start);
@@ -292,7 +288,7 @@ double benchmark_try_decrypt_sprout_notes(size_t nKeys)
 double benchmark_try_decrypt_sapling_notes(size_t nKeys)
 {
     // Set params
-    auto consensusParams = Params().GetConsensus();
+    const Consensus::Params& consensusParams = Params().GetConsensus();
 
     auto masterKey = GetTestMasterSaplingSpendingKey();
 
@@ -331,7 +327,7 @@ CWalletTx CreateSproutTxWithNoteData(const libzcash::SproutSpendingKey& sk) {
 
 double benchmark_increment_sprout_note_witnesses(size_t nTxs)
 {
-    auto consensusParams = Params().GetConsensus();
+    const Consensus::Params& consensusParams = Params().GetConsensus();
 
     CWallet wallet;
     SproutMerkleTree sproutTree;
@@ -393,7 +389,7 @@ CWalletTx CreateSaplingTxWithNoteData(const Consensus::Params& consensusParams,
 
 double benchmark_increment_sapling_note_witnesses(size_t nTxs)
 {
-    auto consensusParams = Params().GetConsensus();
+    const Consensus::Params& consensusParams = Params().GetConsensus();
 
     CWallet wallet;
     SproutMerkleTree sproutTree;
@@ -517,7 +513,7 @@ double benchmark_connectblock_slow()
     // Test for issue 2017-05-01.a
     SelectParams(CBaseChainParams::MAIN);
     CBlock block;
-    FILE* fp = fopen((GetDataDir() / "benchmark/block-107134.dat").string().c_str(), "rb");
+    FILE* fp = fsbridge::fopen(GetDataDir() / "benchmark/block-107134.dat", "rb");
     if (!fp) throw new std::runtime_error("Failed to open block data file");
     CAutoFile blkFile(fp, SER_DISK, CLIENT_VERSION);
     blkFile >> block;
