@@ -38,11 +38,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     cd zcash
     git checkout $VERSION
     ./zcutil/clean.sh
-    CONFIGURE_FLAGS="--disable-tests --disable-mining --disable-bench" ./zcutil/build.sh -j$(nproc)
-    strip src/zcashd
-    strip src/zcash-cli
-    cp src/zcashd ../artifacts/mac
-    cp src/zcash-cli ../artifacts/mac
+    CONFIGURE_FLAGS="--disable-tests --disable-mining --disable-bench" ./zcutil/build.sh -j$(nproc) && strip src/zcashd && strip src/zcash-cli && cp src/zcashd ../artifacts/mac && cp src/zcash-cli ../artifacts/mac
     cd ..
 fi
 
