@@ -32,8 +32,6 @@ mkdir -p artifacts/win
 # Delete the zcash local directory if it exists for the build
 rm -rf ./zcash
 
-docker build --tag adityapk00/zcash:latest docker
-
 # Build for Mac
 if [[ "$OSTYPE" == "darwin"* ]]; then
     git clone --branch $VERSION --depth 1 https://github.com/zcash/zcash
